@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #e2e8f0;
+  background: radial-gradient(circle at top right, #1e293b 0%, #020617 35%, #020617 100%);
+}
+
+.panel {
+  @apply rounded-xl border border-slate-700/70 bg-slate-900/70 shadow-panel backdrop-blur-sm;
+}
+
+.input-control {
+  @apply w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500;
+}
