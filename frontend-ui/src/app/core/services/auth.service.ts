@@ -43,6 +43,28 @@ export class AuthService {
     return !!this.getToken();
   }
 
+  getRole(): string | null {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, string>;
+      return (
+        payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ??
+        payload['role'] ??
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  isAdmin(): boolean {
+    return this.getRole() === 'Admin';
+  }
+
   logout(): void {
     localStorage.removeItem(this.tokenKey);
   }

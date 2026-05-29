@@ -18,9 +18,11 @@ namespace backend_dotnet.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            modelBuilder.Entity<User>()
-                .HasIndex(u => u.Email)
-                .IsUnique();
+            modelBuilder.Entity<DutyLog>()
+                .HasOne(d => d.Pilot)
+                .WithMany(u => u.DutyLogs)
+                .HasForeignKey(d => d.PilotId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

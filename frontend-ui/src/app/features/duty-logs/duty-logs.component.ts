@@ -8,8 +8,9 @@ import {
   ValidatorFn,
   Validators
 } from '@angular/forms';
-import { DutyLog, DutyLogPayload } from '../../core/models/duty-log.models';
+import { DutyLog, DutyLogPayload, UserSummary } from '../../core/models/duty-log.models';
 import { DutyLogService } from '../../core/services/duty-log.service';
+import { UserService } from '../../core/services/user.service';
 import { LoadingSpinnerComponent } from '../../shared/loading-spinner.component';
 
 @Component({
@@ -20,6 +21,7 @@ import { LoadingSpinnerComponent } from '../../shared/loading-spinner.component'
 })
 export class DutyLogsComponent implements OnInit {
   logs: DutyLog[] = [];
+  pilots: UserSummary[] = [];
   loading = false;
   error = '';
   showModal = false;
@@ -36,6 +38,7 @@ export class DutyLogsComponent implements OnInit {
       departureTime: ['', [Validators.required]],
       arrivalTime: ['', [Validators.required]],
       aircraftType: ['', [Validators.required]],
+      pilotId: [null as number | null],
       remarks: ['']
     },
     { validators: [this.routeValidation(), this.timeValidation()] }
@@ -43,11 +46,13 @@ export class DutyLogsComponent implements OnInit {
 
   constructor(
     private readonly fb: FormBuilder,
-    private readonly service: DutyLogService
+    private readonly service: DutyLogService,
+    private readonly userService: UserService
   ) {}
 
   ngOnInit(): void {
     this.fetchLogs();
+    this.fetchPilots();
   }
 
   fetchLogs() {
@@ -65,6 +70,13 @@ export class DutyLogsComponent implements OnInit {
     });
   }
 
+  fetchPilots() {
+    this.userService.getPilots().subscribe({
+      next: (items) => (this.pilots = items),
+      error: (err: Error) => (this.error = err.message)
+    });
+  }
+
   openCreate() {
     this.editingId = null;
     this.form.reset({
@@ -75,6 +87,7 @@ export class DutyLogsComponent implements OnInit {
       departureTime: '',
       arrivalTime: '',
       aircraftType: '',
+      pilotId: null,
       remarks: ''
     });
     this.showModal = true;
@@ -90,6 +103,7 @@ export class DutyLogsComponent implements OnInit {
       departureTime: this.toInputDateTime(log.departureTime),
       arrivalTime: this.toInputDateTime(log.arrivalTime),
       aircraftType: log.aircraftType,
+      pilotId: log.pilotId ?? null,
       remarks: log.remarks
     });
     this.showModal = true;

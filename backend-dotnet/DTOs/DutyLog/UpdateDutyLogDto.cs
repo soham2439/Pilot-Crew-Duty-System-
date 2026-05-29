@@ -26,5 +26,7 @@ namespace backend_dotnet.DTOs.DutyLog
         public string AircraftType { get; set; } = string.Empty;
 
         public string Remarks { get; set; } = string.Empty;
+
+        public int? PilotId { get; set; }
     }
 }

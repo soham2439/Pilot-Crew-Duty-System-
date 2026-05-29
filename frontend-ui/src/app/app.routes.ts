@@ -5,6 +5,7 @@ import { ShellComponent } from './core/layout/shell.component';
 import { LoginComponent } from './features/auth/login.component';
 import { RegisterComponent } from './features/auth/register.component';
 import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
 
 export const appRoutes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -16,7 +17,7 @@ export const appRoutes: Routes = [
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       { path: 'dashboard', component: DashboardComponent },
-      { path: 'duty-logs', component: DutyLogsComponent }
+      { path: 'duty-logs', component: DutyLogsComponent, canActivate: [adminGuard] }
     ]
   },
   { path: '**', redirectTo: '' }

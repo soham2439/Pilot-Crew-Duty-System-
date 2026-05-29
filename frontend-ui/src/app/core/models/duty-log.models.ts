@@ -14,6 +14,8 @@ export interface DutyLog {
   arrivalTime: string;
   aircraftType: string;
   remarks: string;
+  pilotId?: number | null;
+  pilotName?: string | null;
 }
 
 export interface DutyLogPayload {
@@ -25,4 +27,12 @@ export interface DutyLogPayload {
   arrivalTime: string;
   aircraftType: string;
   remarks: string;
+  pilotId?: number | null;
+}
+
+export interface UserSummary {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
 }

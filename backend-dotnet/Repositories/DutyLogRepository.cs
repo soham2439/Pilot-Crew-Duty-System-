@@ -16,12 +16,24 @@ namespace backend_dotnet.Repositories
 
         public async Task<IEnumerable<DutyLog>> GetAllAsync()
         {
-            return await _context.DutyLogs.ToListAsync();
+            return await _context.DutyLogs
+                .Include(d => d.Pilot)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<DutyLog>> GetByPilotIdAsync(int pilotId)
+        {
+            return await _context.DutyLogs
+                .Include(d => d.Pilot)
+                .Where(d => d.PilotId == pilotId)
+                .ToListAsync();
         }
 
         public async Task<DutyLog?> GetByIdAsync(int id)
         {
-            return await _context.DutyLogs.FindAsync(id);
+            return await _context.DutyLogs
+                .Include(d => d.Pilot)
+                .FirstOrDefaultAsync(d => d.Id == id);
         }
 
         public async Task<DutyLog> CreateAsync(DutyLog dutyLog)

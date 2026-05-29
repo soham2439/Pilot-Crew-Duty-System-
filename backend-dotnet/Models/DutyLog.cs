@@ -25,5 +25,9 @@ namespace backend_dotnet.Models
         public string AircraftType { get; set; } = string.Empty;
 
         public string Remarks { get; set; } = string.Empty;
+
+        public int? PilotId { get; set; }
+
+        public User? Pilot { get; set; }
     }
 }

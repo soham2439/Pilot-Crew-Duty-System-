@@ -29,6 +29,7 @@ import { AuthService } from '../services/auth.service';
             Dashboard
           </a>
           <a
+            *ngIf="isAdmin"
             routerLink="/duty-logs"
             routerLinkActive="bg-slate-700 text-cyan-300"
             class="block rounded-md px-3 py-2 text-slate-300 hover:bg-slate-800"
@@ -53,6 +54,10 @@ export class ShellComponent {
     private readonly auth: AuthService,
     private readonly router: Router
   ) {}
+
+  get isAdmin() {
+    return this.auth.isAdmin();
+  }
 
   logout() {
     this.auth.logout();

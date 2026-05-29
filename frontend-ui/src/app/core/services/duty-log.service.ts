@@ -16,6 +16,13 @@ export class DutyLogService {
     );
   }
 
+  getMyDuties() {
+    return this.http.get<ApiResponse<DutyLog[]>>(`${this.endpoint}/my-duties`).pipe(
+      map((response) => response.data ?? []),
+      catchError((error) => this.handleError(error, 'Failed to load your duty roster'))
+    );
+  }
+
   getById(id: number) {
     return this.http.get<ApiResponse<DutyLog>>(`${this.endpoint}/${id}`).pipe(
       map((response) => response.data),

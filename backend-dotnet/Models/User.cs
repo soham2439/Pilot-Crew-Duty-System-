@@ -14,5 +14,7 @@ namespace backend_dotnet.Models
         public string PasswordHash { get; set; } = string.Empty;
 
         public string Role { get; set; } = "Pilot";
+
+        public ICollection<DutyLog> DutyLogs { get; set; } = new List<DutyLog>();
     }
 }

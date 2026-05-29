@@ -6,6 +6,8 @@ namespace backend_dotnet.Interfaces
     {
         Task<IEnumerable<DutyLogResponseDto>> GetAllAsync();
 
+        Task<IEnumerable<DutyLogResponseDto>> GetByPilotIdAsync(int pilotId);
+
         Task<DutyLogResponseDto?> GetByIdAsync(int id);
 
         Task<DutyLogResponseDto> CreateAsync(CreateDutyLogDto dto);

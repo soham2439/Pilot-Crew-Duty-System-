@@ -17,18 +17,14 @@ namespace backend_dotnet.Services
         {
             var dutyLogs = await _repository.GetAllAsync();
 
-            return dutyLogs.Select(d => new DutyLogResponseDto
-            {
-                Id = d.Id,
-                DutyCode = d.DutyCode,
-                FlightNumber = d.FlightNumber,
-                Origin = d.Origin,
-                Destination = d.Destination,
-                DepartureTime = d.DepartureTime,
-                ArrivalTime = d.ArrivalTime,
-                AircraftType = d.AircraftType,
-                Remarks = d.Remarks
-            });
+            return dutyLogs.Select(ToDto);
+        }
+
+        public async Task<IEnumerable<DutyLogResponseDto>> GetByPilotIdAsync(int pilotId)
+        {
+            var dutyLogs = await _repository.GetByPilotIdAsync(pilotId);
+
+            return dutyLogs.Select(ToDto);
         }
 
         public async Task<DutyLogResponseDto?> GetByIdAsync(int id)
@@ -40,18 +36,7 @@ namespace backend_dotnet.Services
                 return null;
             }
 
-            return new DutyLogResponseDto
-            {
-                Id = dutyLog.Id,
-                DutyCode = dutyLog.DutyCode,
-                FlightNumber = dutyLog.FlightNumber,
-                Origin = dutyLog.Origin,
-                Destination = dutyLog.Destination,
-                DepartureTime = dutyLog.DepartureTime,
-                ArrivalTime = dutyLog.ArrivalTime,
-                AircraftType = dutyLog.AircraftType,
-                Remarks = dutyLog.Remarks
-            };
+            return ToDto(dutyLog);
         }
 
         public async Task<DutyLogResponseDto> CreateAsync(CreateDutyLogDto dto)
@@ -65,23 +50,13 @@ namespace backend_dotnet.Services
                 DepartureTime = dto.DepartureTime,
                 ArrivalTime = dto.ArrivalTime,
                 AircraftType = dto.AircraftType,
-                Remarks = dto.Remarks
+                Remarks = dto.Remarks,
+                PilotId = dto.PilotId
             };
 
             var createdDutyLog = await _repository.CreateAsync(dutyLog);
 
-            return new DutyLogResponseDto
-            {
-                Id = createdDutyLog.Id,
-                DutyCode = createdDutyLog.DutyCode,
-                FlightNumber = createdDutyLog.FlightNumber,
-                Origin = createdDutyLog.Origin,
-                Destination = createdDutyLog.Destination,
-                DepartureTime = createdDutyLog.DepartureTime,
-                ArrivalTime = createdDutyLog.ArrivalTime,
-                AircraftType = createdDutyLog.AircraftType,
-                Remarks = createdDutyLog.Remarks
-            };
+            return ToDto(createdDutyLog);
         }
 
         public async Task<bool> UpdateAsync(int id, UpdateDutyLogDto dto)
@@ -101,6 +76,7 @@ namespace backend_dotnet.Services
             dutyLog.ArrivalTime = dto.ArrivalTime;
             dutyLog.AircraftType = dto.AircraftType;
             dutyLog.Remarks = dto.Remarks;
+            dutyLog.PilotId = dto.PilotId;
 
             await _repository.UpdateAsync(dutyLog);
 
@@ -119,6 +95,24 @@ namespace backend_dotnet.Services
             await _repository.DeleteAsync(dutyLog);
 
             return true;
+        }
+
+        private static DutyLogResponseDto ToDto(DutyLog dutyLog)
+        {
+            return new DutyLogResponseDto
+            {
+                Id = dutyLog.Id,
+                DutyCode = dutyLog.DutyCode,
+                FlightNumber = dutyLog.FlightNumber,
+                Origin = dutyLog.Origin,
+                Destination = dutyLog.Destination,
+                DepartureTime = dutyLog.DepartureTime,
+                ArrivalTime = dutyLog.ArrivalTime,
+                AircraftType = dutyLog.AircraftType,
+                Remarks = dutyLog.Remarks,
+                PilotId = dutyLog.PilotId,
+                PilotName = dutyLog.Pilot?.Name
+            };
         }
     }
 }
