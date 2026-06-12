@@ -81,10 +81,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
 
     builder.Services.AddScoped<IDutyLogRepository, DutyLogRepository>();
     builder.Services.AddScoped<IDutyLogService, DutyLogService>();
+    builder.Services.AddScoped<AiDutyActionService>();
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    context.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""RegistryLogs"" (
+            ""Id"" SERIAL PRIMARY KEY,
+            ""Action"" TEXT NOT NULL,
+            ""DutyId"" INTEGER NULL,
+            ""FlightNumber"" TEXT NOT NULL,
+            ""ActorName"" TEXT NOT NULL,
+            ""Timestamp"" TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+            ""Details"" TEXT NOT NULL
+        );
+    ");
+}
 
 // Configure pipeline
 if (app.Environment.IsDevelopment())

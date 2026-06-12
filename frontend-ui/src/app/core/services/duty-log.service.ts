@@ -49,6 +49,13 @@ export class DutyLogService {
     );
   }
 
+  getRegistry() {
+    return this.http.get<ApiResponse<any[]>>('/api/registry').pipe(
+      map((response) => response.data ?? []),
+      catchError((error) => this.handleError(error, 'Failed to load registry log timeline'))
+    );
+  }
+
   private handleError(error: unknown, fallbackMessage: string) {
     const message =
       typeof error === 'object' && error && 'error' in error

@@ -1,12 +1,8 @@
 namespace backend_dotnet.DTOs.Ai
 {
-    public class AiChatResponseDto
+    public class AiUpstreamResponseDto
     {
         public string Response { get; set; } = string.Empty;
-
-        public bool DutiesChanged { get; set; }
-
-        public List<string> ActionResults { get; set; } = new();
 
         public List<AiActionDto> Actions { get; set; } = new();
     }

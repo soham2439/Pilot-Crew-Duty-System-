@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import {
   AbstractControl,
   FormBuilder,
@@ -16,7 +17,7 @@ import { LoadingSpinnerComponent } from '../../shared/loading-spinner.component'
 @Component({
   selector: 'app-duty-logs',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, LoadingSpinnerComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, LoadingSpinnerComponent],
   templateUrl: './duty-logs.component.html'
 })
 export class DutyLogsComponent implements OnInit {
@@ -26,6 +27,10 @@ export class DutyLogsComponent implements OnInit {
   error = '';
   showModal = false;
   editingId: number | null = null;
+  searchTerm = '';
+  dutyFilter = 'ALL';
+  pilotFilter = 'ALL';
+  assignmentFilter = 'ALL';
 
   dutyCodes = ['FDUT', 'DOFF', 'VAC', 'SICK', 'AVBL'];
 
@@ -150,6 +155,51 @@ export class DutyLogsComponent implements OnInit {
       next: () => this.fetchLogs(),
       error: (err: Error) => (this.error = err.message)
     });
+  }
+
+  get filteredLogs() {
+    const search = this.searchTerm.trim().toLowerCase();
+
+    return this.logs.filter((log) => {
+      const matchesSearch =
+        !search ||
+        [
+          log.dutyCode,
+          log.flightNumber,
+          log.origin,
+          log.destination,
+          log.aircraftType,
+          log.pilotName ?? '',
+          log.remarks
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(search);
+
+      const matchesDuty = this.dutyFilter === 'ALL' || log.dutyCode === this.dutyFilter;
+      const matchesPilot = this.pilotFilter === 'ALL' || log.pilotId === Number(this.pilotFilter);
+      const matchesAssignment =
+        this.assignmentFilter === 'ALL' ||
+        (this.assignmentFilter === 'ASSIGNED' && !!log.pilotId) ||
+        (this.assignmentFilter === 'UNASSIGNED' && !log.pilotId);
+
+      return matchesSearch && matchesDuty && matchesPilot && matchesAssignment;
+    });
+  }
+
+  get unassignedCount() {
+    return this.logs.filter((log) => !log.pilotId).length;
+  }
+
+  get assignedCount() {
+    return this.logs.length - this.unassignedCount;
+  }
+
+  clearFilters() {
+    this.searchTerm = '';
+    this.dutyFilter = 'ALL';
+    this.pilotFilter = 'ALL';
+    this.assignmentFilter = 'ALL';
   }
 
   badgeClass(code: string) {

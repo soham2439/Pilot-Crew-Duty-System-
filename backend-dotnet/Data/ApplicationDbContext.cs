@@ -14,6 +14,8 @@ namespace backend_dotnet.Data
 
         public DbSet<User> Users { get; set; }
 
+        public DbSet<RegistryLog> RegistryLogs { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

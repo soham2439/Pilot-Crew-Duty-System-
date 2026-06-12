@@ -36,3 +36,13 @@ export interface UserSummary {
   email: string;
   role: string;
 }
+
+export interface RegistryLog {
+  id: number;
+  action: string;
+  dutyId?: number | null;
+  flightNumber: string;
+  actorName: string;
+  timestamp: string;
+  details: string;
+}

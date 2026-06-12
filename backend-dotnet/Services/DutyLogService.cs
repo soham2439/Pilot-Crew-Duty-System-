@@ -1,16 +1,26 @@
+using backend_dotnet.Data;
 using backend_dotnet.DTOs.DutyLog;
 using backend_dotnet.Interfaces;
 using backend_dotnet.Models;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 
 namespace backend_dotnet.Services
 {
     public class DutyLogService : IDutyLogService
     {
         private readonly IDutyLogRepository _repository;
+        private readonly ApplicationDbContext _context;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public DutyLogService(IDutyLogRepository repository)
+        public DutyLogService(
+            IDutyLogRepository repository,
+            ApplicationDbContext context,
+            IHttpContextAccessor httpContextAccessor)
         {
             _repository = repository;
+            _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<IEnumerable<DutyLogResponseDto>> GetAllAsync()
@@ -56,6 +66,18 @@ namespace backend_dotnet.Services
 
             var createdDutyLog = await _repository.CreateAsync(dutyLog);
 
+            string assignDetails = "";
+            if (dto.PilotId.HasValue)
+            {
+                var pilot = _context.Users.Find(dto.PilotId.Value);
+                if (pilot != null)
+                {
+                    assignDetails = $" Assigned to pilot {pilot.Name}.";
+                    await LogRegistryAsync("assigned", createdDutyLog.Id, createdDutyLog.FlightNumber, $"Assigned to pilot {pilot.Name} on creation.");
+                }
+            }
+            await LogRegistryAsync("created", createdDutyLog.Id, createdDutyLog.FlightNumber, $"Created {createdDutyLog.DutyCode} duty.{assignDetails}");
+
             return ToDto(createdDutyLog);
         }
 
@@ -67,6 +89,9 @@ namespace backend_dotnet.Services
             {
                 return false;
             }
+
+            var oldPilotId = dutyLog.PilotId;
+            var oldPilotName = dutyLog.Pilot?.Name;
 
             dutyLog.DutyCode = dto.DutyCode;
             dutyLog.FlightNumber = dto.FlightNumber;
@@ -80,6 +105,28 @@ namespace backend_dotnet.Services
 
             await _repository.UpdateAsync(dutyLog);
 
+            if (oldPilotId != dto.PilotId)
+            {
+                if (oldPilotId == null && dto.PilotId != null)
+                {
+                    var pilot = _context.Users.Find(dto.PilotId.Value);
+                    var pilotName = pilot?.Name ?? "Unknown";
+                    await LogRegistryAsync("assigned", id, dto.FlightNumber, $"Assigned to pilot {pilotName}.");
+                }
+                else if (oldPilotId != null && dto.PilotId == null)
+                {
+                    await LogRegistryAsync("unassigned", id, dto.FlightNumber, $"Unassigned pilot {oldPilotName}.");
+                }
+                else if (oldPilotId != null && dto.PilotId != null)
+                {
+                    var pilot = _context.Users.Find(dto.PilotId.Value);
+                    var pilotName = pilot?.Name ?? "Unknown";
+                    await LogRegistryAsync("assigned", id, dto.FlightNumber, $"Reassigned from {oldPilotName} to {pilotName}.");
+                }
+            }
+
+            await LogRegistryAsync("updated", id, dto.FlightNumber, $"Updated duty details.");
+
             return true;
         }
 
@@ -92,9 +139,59 @@ namespace backend_dotnet.Services
                 return false;
             }
 
+            var flightNum = dutyLog.FlightNumber;
             await _repository.DeleteAsync(dutyLog);
 
+            await LogRegistryAsync("deleted", id, flightNum, $"Deleted duty.");
+
             return true;
+        }
+
+        private string GetActorName()
+        {
+            try
+            {
+                var user = _httpContextAccessor.HttpContext?.User;
+                var userIdClaim = user?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (int.TryParse(userIdClaim, out var userId))
+                {
+                    var dbUser = _context.Users.Find(userId);
+                    if (dbUser != null)
+                    {
+                        return dbUser.Name;
+                    }
+                }
+                var email = user?.FindFirstValue(ClaimTypes.Name);
+                if (!string.IsNullOrEmpty(email))
+                {
+                    return email;
+                }
+            }
+            catch { }
+            return "System / Copilot";
+        }
+
+        private async Task LogRegistryAsync(string action, int? dutyId, string flightNumber, string details)
+        {
+            try
+            {
+                var actor = GetActorName();
+                var log = new RegistryLog
+                {
+                    Action = action,
+                    DutyId = dutyId,
+                    FlightNumber = flightNumber,
+                    ActorName = actor,
+                    Timestamp = DateTime.UtcNow,
+                    Details = details
+                };
+                _context.RegistryLogs.Add(log);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to write registry log: {ex.Message}");
+            }
         }
 
         private static DutyLogResponseDto ToDto(DutyLog dutyLog)

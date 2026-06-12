@@ -10,14 +10,83 @@ body {
 body {
   margin: 0;
   font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: #e2e8f0;
-  background: radial-gradient(circle at top right, #1e293b 0%, #020617 35%, #020617 100%);
+  color: #064e3b;
+  background:
+    linear-gradient(135deg, rgba(20, 83, 45, 0.96), rgba(22, 101, 52, 0.9) 42%, rgba(187, 247, 208, 0.78)),
+    #14532d;
 }
 
 .panel {
-  @apply rounded-xl border border-slate-700/70 bg-slate-900/70 shadow-panel backdrop-blur-sm;
+  @apply rounded-xl border-2 border-green-700 bg-green-50/95 shadow-panel backdrop-blur-sm;
 }
 
 .input-control {
-  @apply w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500;
+  @apply w-full rounded-md border-2 border-green-500 bg-white px-3 py-2 text-sm text-green-950 outline-none focus:border-green-800 focus:ring-2 focus:ring-green-700;
+}
+
+.text-slate-100,
+.text-slate-200,
+.text-slate-300 {
+  color: #064e3b;
+}
+
+.text-slate-400 {
+  color: #15803d;
+}
+
+.text-cyan-200,
+.text-cyan-300 {
+  color: #166534;
+}
+
+.bg-slate-700,
+.bg-slate-800,
+.bg-slate-900,
+.bg-slate-900\/40 {
+  background-color: #dcfce7;
+}
+
+.bg-cyan-600 {
+  background-color: #15803d;
+  color: #fff;
+}
+
+.hover\:bg-cyan-500:hover {
+  background-color: #166534;
+}
+
+.border-slate-700\/60,
+.border-slate-700,
+.border-slate-600 {
+  border-color: #15803d;
+  border-width: 2px;
+}
+
+#duty-logs-nav-link {
+  color: #ffffff !important;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.9);
+    border-color: rgba(234, 179, 8, 0.9);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(234, 179, 8, 0);
+    border-color: rgba(234, 179, 8, 1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+    border-color: rgba(234, 179, 8, 0.9);
+  }
+}
+
+.pulse-highlight {
+  animation: pulseGlow 1.5s infinite ease-in-out;
+  border-width: 3px !important;
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+  z-index: 10;
+  background-color: rgba(254, 243, 199, 0.9) !important; /* light yellow bg for contrast */
+  color: #78350f !important; /* dark yellow/brown text */
 }
