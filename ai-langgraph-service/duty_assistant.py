@@ -62,24 +62,42 @@ MONTHS: dict[str, int] = {
 
 DUTY_CODES = {"FDUT", "DOFF", "VAC", "SICK", "AVBL"}
 
+WEATHER_DB = {
+    "DXB": {"condition": "Sunny", "temp": 39, "wind": "11kt N", "visibility": "10km+", "metar": "OMDB 180800Z 35011KT 9999 FEW030 39/22 Q1008 NOSIG"},
+    "DOH": {"condition": "Clear", "temp": 37, "wind": "9kt NE", "visibility": "10km+", "metar": "OTBD 180800Z 04009KT 9999 SKC 37/24 Q1007 NOSIG"},
+    "MAA": {"condition": "Scattered Clouds", "temp": 31, "wind": "14kt SW", "visibility": "8km", "metar": "VOMM 180800Z 22014KT 8000 FEW025 SCT100 31/26 Q1005 NOSIG"},
+    "BOM": {"condition": "Monsoon Rain", "temp": 28, "wind": "18kt W", "visibility": "4km", "metar": "VABB 180800Z 26018KT 4000 RA SCT015 BKN080 28/25 Q1004 TEMPO 3000"},
+    "DEL": {"condition": "Haze", "temp": 42, "wind": "5kt NW", "visibility": "3km", "metar": "VIDP 180800Z 31005KT 3000 HZ NSC 42/20 Q1006 NOSIG"},
+    "LHR": {"condition": "Showers", "temp": 17, "wind": "12kt WSW", "visibility": "10km", "metar": "EGLL 180800Z 24012KT 9999 -SHRA BKN020 17/11 Q1013 NOSIG"},
+    "SIN": {"condition": "Thunderstorms", "temp": 30, "wind": "8kt S", "visibility": "6km", "metar": "WSSS 180800Z 18008KT 6000 TSRA FEW018CB BKN080 30/25 Q1009 TEMPO 3000"},
+    "AUH": {"condition": "Sunny", "temp": 38, "wind": "10kt N", "visibility": "10km+", "metar": "OMAA 180800Z 36010KT 9999 SKC 38/21 Q1008 NOSIG"},
+    "RUH": {"condition": "Clear", "temp": 41, "wind": "15kt NE", "visibility": "10km+", "metar": "OERK 180800Z 05015KT 9999 SKC 41/12 Q1006 NOSIG"},
+    "JED": {"condition": "Clear", "temp": 36, "wind": "12kt NW", "visibility": "10km+", "metar": "OEJN 180800Z 31012KT 9999 SKC 36/23 Q1007 NOSIG"},
+    "CAI": {"condition": "Sunny", "temp": 34, "wind": "7kt N", "visibility": "10km+", "metar": "HECA 180800Z 36007KT 9999 SKC 34/18 Q1012 NOSIG"},
+    "IST": {"condition": "Clear", "temp": 26, "wind": "14kt NE", "visibility": "10km+", "metar": "LTFM 180800Z 04014KT 9999 SKC 26/15 Q1015 NOSIG"},
+}
 
-def parse_context(context: Optional[str]) -> tuple[str, list[dict[str, Any]], Optional[int]]:
+
+
+def parse_context(context: Optional[str]) -> tuple[str, list[dict[str, Any]], Optional[int], str]:
     role = "Pilot"
     duties: list[dict[str, Any]] = []
     pilot_id: Optional[int] = None
+    user_name = "Captain"
 
     if not context:
-        return role, duties, pilot_id
+        return role, duties, pilot_id, user_name
 
     try:
         parsed = json.loads(context)
         role = parsed.get("role", role)
         duties = parsed.get("duties", [])
         pilot_id = parsed.get("pilotId")
+        user_name = parsed.get("userName", user_name)
     except json.JSONDecodeError:
         pass
 
-    return role, duties, pilot_id
+    return role, duties, pilot_id, user_name
 
 
 def parse_registry(context: Optional[str]) -> list[dict[str, Any]]:
@@ -491,7 +509,7 @@ def _filter_duties_by_relative_range(tokens: list[str], duties: list[dict[str, A
 def process_prompt(prompt: str, context: Optional[str], reference: Optional[datetime] = None) -> dict[str, Any]:
     """Return { response: str, actions: list[dict] }."""
     now = reference or datetime.now()
-    role, duties, _pilot_id = parse_context(context)
+    role, duties, _pilot_id, user_name = parse_context(context)
     registry = parse_registry(context)
     prompt_lower = prompt.lower()
     actions: list[dict[str, Any]] = []
@@ -500,82 +518,152 @@ def process_prompt(prompt: str, context: Optional[str], reference: Optional[date
     tokens = word_tokenize(prompt)
     tokens_set = set(tokens)
 
+    # Pre-calculate greeting based on time of day
+    greeting = "Good morning"
+    if 12 <= now.hour < 17:
+        greeting = "Good afternoon"
+    elif 17 <= now.hour < 22:
+        greeting = "Good evening"
+    elif now.hour >= 22 or now.hour < 5:
+        greeting = "Good night"
+
+    # --- 1.2 Query: Weather Briefing ---
+    if "weather" in prompt_lower or "metar" in prompt_lower or "conditions" in prompt_lower:
+        airport_code = None
+        # Try to find 3-letter IATA code directly
+        iata_match = re.search(r"\b([A-Za-z]{3})\b", prompt)
+        if iata_match and iata_match.group(1).upper() in WEATHER_DB:
+            airport_code = iata_match.group(1).upper()
+        else:
+            # Check for city name mapping
+            for city, code in CITY_TO_IATA.items():
+                if city in prompt_lower:
+                    airport_code = code
+                    break
+        
+        # Fallback to destination of the next flight in duties
+        if not airport_code:
+            future_duties = [
+                item for item in duties
+                if (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
+            ]
+            future_duties.sort(key=lambda x: _duty_dt(x) or datetime.max)
+            next_flight = next((d for d in future_duties if str(d.get("dutyCode", "")).upper() == "FDUT"), None)
+            if next_flight:
+                airport_code = next_flight.get("destination")
+        
+        if airport_code and airport_code in WEATHER_DB:
+            w = WEATHER_DB[airport_code]
+            response_text = (
+                f"🌦️ **Airport Weather Briefing for {airport_code}**:\n\n"
+                f"* **Condition**: {w['condition']}\n"
+                f"* **Temperature**: {w['temp']}°C\n"
+                f"* **Winds**: {w['wind']}\n"
+                f"* **Visibility**: {w['visibility']}\n\n"
+                f"**Raw METAR**:\n`{w['metar']}`"
+            )
+            return {
+                "response": response_text,
+                "actions": [{"type": "navigate_weather", "payload": {"airport": airport_code}}]
+            }
+        elif airport_code:
+            return {
+                "response": f"Sorry, I don't have weather reports for airport {airport_code}. Currently I support weather briefings for: {', '.join(WEATHER_DB.keys())}.",
+                "actions": []
+            }
+        else:
+            return {
+                "response": "Please specify an airport code (e.g. DXB, LHR) or ask 'weather for my next flight'. Supported airports: " + ", ".join(WEATHER_DB.keys()),
+                "actions": []
+            }
+
     # --- 1. Query: briefing / daily briefing ---
     if any(k in prompt_lower for k in ["briefing", "daily briefing", "contextual briefing"]) or tokens_set.intersection({"hi", "hello", "hey", "greetings", "greet"}):
-        future_duties = [
-            item for item in duties
-            if (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
-        ]
-        future_duties.sort(key=lambda x: _duty_dt(x) or datetime.max)
-        
-        next_duty_str = "None"
-        next_duty_id = None
-        countdown_str = ""
-        aircraft_str = ""
-        if future_duties:
-            item = future_duties[0]
-            next_duty_id = item.get("id")
-            next_duty_str = f"{item.get('dutyCode')} {item.get('flightNumber')} from {item.get('origin')} to {item.get('destination')}"
-            dep_time = _duty_dt(item)
-            if dep_time:
-                hours_diff = (dep_time - now).total_seconds() / 3600
-                if hours_diff > 0:
-                    countdown_str = f" (starts in {round(hours_diff)}h)"
-            aircraft_str = item.get("aircraftType", "")
-
-        start_of_week = now - timedelta(days=now.weekday())
-        end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59)
-        week_duties = _filter_by_range(duties, start_of_week, end_of_week)
-        week_count = len(week_duties)
-        
-        doffs = [
-            item for item in duties
-            if str(item.get("dutyCode", "")).upper() == "DOFF"
-            and (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
-        ]
-        doffs.sort(key=lambda x: _duty_dt(x) or datetime.max)
-        next_doff_str = f"{_duty_dt(doffs[0]).date()}" if doffs else "None scheduled"
-
-        warnings = []
-        rest_violations = _detect_short_rest_periods(duties)
-        warnings.extend(rest_violations)
-        
-        weekly_hours = _calculate_weekly_worked_hours(duties, now)
-        if weekly_hours > 40.0:
-            warnings.append(f"High Workload: You have worked/scheduled {weekly_hours:.1f} hours this week (exceeding standard 40 hrs limit).")
-        else:
-            warnings.append(f"Workload Status: You have {weekly_hours:.1f} active hours scheduled this week.")
+        if str(role).lower() == "admin":
+            unassigned_count = len([d for d in duties if not d.get("pilotId")])
+            total_count = len(duties)
+            active_pilots = len(set(d.get("pilotName") for d in duties if d.get("pilotName")))
             
-        delays_count = len([item for item in duties if "delay" in str(item.get("remarks", "")).lower()])
-        if delays_count > 0:
-            warnings.append(f"Alert: {delays_count} flights in your roster are marked as delayed.")
+            response_text = (
+                f"💼 **{greeting}, Controller {user_name}.**\n\n"
+                f"Welcome to the Operations Controller Assistant dashboard. Here is your operational status brief:\n\n"
+                f"* **Total Duties**: {total_count} flight & standby tasks\n"
+                f"* **Needs Assignment**: **{unassigned_count}** unassigned duties remaining\n"
+                f"* **Active Pilots**: {active_pilots} crew members assigned\n"
+                f"* **Audit Timeline**: {len(registry)} historical changes logged\n\n"
+                f"You can ask me to assign a pilot, create a flight, check roster overlaps, or inspect logs."
+            )
+            return {
+                "response": response_text,
+                "actions": []
+            }
+        else:
+            future_duties = [
+                item for item in duties
+                if (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
+            ]
+            future_duties.sort(key=lambda x: _duty_dt(x) or datetime.max)
+            
+            next_duty_str = "None"
+            next_duty_id = None
+            countdown_str = ""
+            aircraft_str = ""
+            if future_duties:
+                item = future_duties[0]
+                next_duty_id = item.get("id")
+                next_duty_str = f"{item.get('dutyCode')} {item.get('flightNumber')} from {item.get('origin')} to {item.get('destination')}"
+                dep_time = _duty_dt(item)
+                if dep_time:
+                    hours_diff = (dep_time - now).total_seconds() / 3600
+                    if hours_diff > 0:
+                        countdown_str = f" (starts in {round(hours_diff)}h)"
+                aircraft_str = item.get("aircraftType", "")
 
-        greeting = "Good morning"
-        if 12 <= now.hour < 17:
-            greeting = "Good afternoon"
-        elif 17 <= now.hour < 22:
-            greeting = "Good evening"
-        elif now.hour >= 22 or now.hour < 5:
-            greeting = "Good night"
+            start_of_week = now - timedelta(days=now.weekday())
+            end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59)
+            week_duties = _filter_by_range(duties, start_of_week, end_of_week)
+            week_count = len(week_duties)
+            
+            doffs = [
+                item for item in duties
+                if str(item.get("dutyCode", "")).upper() == "DOFF"
+                and (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
+            ]
+            doffs.sort(key=lambda x: _duty_dt(x) or datetime.max)
+            next_doff_str = f"{_duty_dt(doffs[0]).date()}" if doffs else "None scheduled"
 
-        warnings_formatted = ""
-        if warnings:
-            warnings_formatted = "\n\n⚠️ **Operational Alerts & Workload Warning:**\n- " + "\n- ".join(warnings)
+            warnings = []
+            rest_violations = _detect_short_rest_periods(duties)
+            warnings.extend(rest_violations)
+            
+            weekly_hours = _calculate_weekly_worked_hours(duties, now)
+            if weekly_hours > 40.0:
+                warnings.append(f"High Workload: You have worked/scheduled {weekly_hours:.1f} hours this week (exceeding standard 40 hrs limit).")
+            else:
+                warnings.append(f"Workload Status: You have {weekly_hours:.1f} active hours scheduled this week.")
+                
+            delays_count = len([item for item in duties if "delay" in str(item.get("remarks", "")).lower()])
+            if delays_count > 0:
+                warnings.append(f"Alert: {delays_count} flights in your roster are marked as delayed.")
 
-        response_text = (
-            f"🤖 **{greeting}, Captain.**\n\n"
-            f"Here is your daily AI Briefing:\n\n"
-            f"* **Next Duty**: {next_duty_str}{countdown_str}\n"
-            f"* **Aircraft**: {aircraft_str if aircraft_str else 'N/A'}\n"
-            f"* **Weekly Schedule**: {week_count} duty/duties scheduled this week\n"
-            f"* **Upcoming Day Off**: {next_doff_str}"
-            f"{warnings_formatted}\n\n"
-            f"How may I assist you today?"
-        )
-        return {
-            "response": response_text,
-            "actions": [{"type": "highlight_duty", "id": next_duty_id}] if next_duty_id else []
-        }
+            warnings_formatted = ""
+            if warnings:
+                warnings_formatted = "\n\n⚠️ **Operational Alerts & Workload Warning:**\n- " + "\n- ".join(warnings)
+
+            response_text = (
+                f"🤖 **{greeting}, Captain {user_name}.**\n\n"
+                f"Here is your daily AI Briefing:\n\n"
+                f"* **Next Duty**: {next_duty_str}{countdown_str}\n"
+                f"* **Aircraft**: {aircraft_str if aircraft_str else 'N/A'}\n"
+                f"* **Weekly Schedule**: {week_count} duty/duties scheduled this week\n"
+                f"* **Upcoming Day Off**: {next_doff_str}"
+                f"{warnings_formatted}\n\n"
+                f"How may I assist you today?"
+            )
+            return {
+                "response": response_text,
+                "actions": [{"type": "highlight_duty", "id": next_duty_id}] if next_duty_id else []
+            }
 
     # --- 1.5 Mutation: assign or unassign pilot ---
     if "assign" in prompt_lower or "unassign" in prompt_lower:
@@ -843,6 +931,118 @@ def process_prompt(prompt: str, context: Optional[str], reference: Optional[date
             "actions": actions,
         }
 
+    # --- 6.1. Query: Specific Flight queries (e.g. flight AA123, is AA123 delayed, etc.) ---
+    flight_num = _extract_flight_number(prompt)
+    if flight_num and not tokens_set.intersection({"delete", "remove", "update", "change", "add", "create", "insert", "replace", "assign", "unassign"}):
+        matching = [d for d in duties if str(d.get("flightNumber", "")).upper() == flight_num.upper()]
+        if matching:
+            lines = []
+            res_actions = [{"type": "navigate_roster"}]
+            for item in matching:
+                dep = item.get("departureTime", "")
+                arr = item.get("arrivalTime", "")
+                origin = item.get("origin", "")
+                dest = item.get("destination", "")
+                ac = item.get("aircraftType", "")
+                remarks = item.get("remarks", "")
+                code = item.get("dutyCode", "")
+                
+                status = "Scheduled"
+                if "delay" in str(remarks).lower():
+                    status = "Delayed ⚠️"
+                elif _parse_duty_time(arr) and _parse_duty_time(arr) < now:
+                    status = "Completed"
+                    
+                lines.append(
+                    f"✈️ **Flight {flight_num.upper()}** ({code}):\n"
+                    f"  * Route: {origin} -> {dest}\n"
+                    f"  * Departure: {dep}\n"
+                    f"  * Arrival: {arr}\n"
+                    f"  * Aircraft: {ac}\n"
+                    f"  * Status: {status}\n"
+                    f"  * Remarks: {remarks or 'None'}"
+                )
+                if item.get("id") is not None:
+                    res_actions.append({"type": "highlight_duty", "id": item.get("id")})
+            return {
+                "response": "\n\n".join(lines),
+                "actions": res_actions
+            }
+        else:
+            return {
+                "response": f"I couldn't find flight {flight_num.upper()} in your roster context.",
+                "actions": []
+            }
+
+    # --- 6.2. Query: Free/Available on a specific date (e.g. am I free on Monday?) ---
+    target_date = _extract_date(prompt, now)
+    if target_date and tokens_set.intersection({"free", "available", "off", "doff", "idle", "vacation", "vac"}):
+        matched = _duties_on_date(duties, target_date)
+        if not matched:
+            return {
+                "response": f"Yes, you have no duties scheduled on {target_date.date().strftime('%A, %d %B %Y')}. You are free!",
+                "actions": []
+            }
+        
+        doff_or_vac = [d for d in matched if str(d.get("dutyCode", "")).upper() in {"DOFF", "VAC"}]
+        if len(doff_or_vac) == len(matched):
+            codes = ", ".join(set(str(d.get("dutyCode")).upper() for d in doff_or_vac))
+            return {
+                "response": f"Yes, you have {codes} scheduled on {target_date.date().strftime('%A, %d %B %Y')}. You are off duty!",
+                "actions": []
+            }
+        
+        flights = [d for d in matched if str(d.get("dutyCode")).upper() == "FDUT"]
+        lines = [_format_duty(item) for item in flights]
+        return {
+            "response": f"No, you are not free on {target_date.date().strftime('%A, %d %B %Y')}. You have the following flight duty/duties:\n- " + "\n- ".join(lines),
+            "actions": [{"type": "navigate_roster"}]
+        }
+
+    # --- 6.3. Query: Specific date/day query (e.g. what is my duty on Monday / June 15) ---
+    if target_date and not tokens_set.intersection({"add", "create", "insert", "delete", "remove", "convert", "change", "switch", "update", "replace", "duration"}):
+        matched = _duties_on_date(duties, target_date)
+        res_actions = [{"type": "navigate_roster"}]
+        if not matched:
+            return {
+                "response": f"You have no duties scheduled on {target_date.date().strftime('%A, %d %B %Y')}.",
+                "actions": res_actions
+            }
+        lines = [_format_duty(item) for item in matched]
+        if len(matched) == 1 and matched[0].get("id") is not None:
+            res_actions.append({"type": "highlight_duty", "id": matched[0].get("id")})
+        return {
+            "response": f"On {target_date.date().strftime('%A, %d %B %Y')}, you have {len(matched)} duties:\n- " + "\n- ".join(lines),
+            "actions": res_actions
+        }
+
+    # --- 6.4. Query: General duties / schedule / roster / flights queries (when no specific relative range or date matched) ---
+    is_general_query = tokens_set.intersection({"show", "list", "get", "view", "what", "tell", "describe", "any", "my", "me", "flying", "go"}) or "what is" in prompt_lower or "what are" in prompt_lower or "tell me" in prompt_lower
+    is_general_target = tokens_set.intersection({"duty", "duties", "roster", "schedule", "flight", "flights", "work"})
+    if is_general_query and is_general_target and not tokens_set.intersection({"add", "create", "insert", "delete", "remove", "convert", "change", "switch", "update", "replace", "next", "upcoming", "doff", "day-off"}):
+        if not duties:
+            return {
+                "response": "You have no duties scheduled in your roster.",
+                "actions": [{"type": "navigate_roster"}]
+            }
+        sorted_duties = sorted([d for d in duties if _duty_dt(d)], key=lambda x: _duty_dt(x))
+        if not sorted_duties:
+            sorted_duties = duties
+        lines = [_format_duty(item) for item in sorted_duties]
+        res_actions = [{"type": "navigate_roster"}]
+        future_duties = [
+            item for item in sorted_duties
+            if (_duty_dt(item) or datetime.min) >= now.replace(hour=0, minute=0, second=0, microsecond=0)
+        ]
+        if future_duties:
+            res_actions.append({"type": "highlight_duty", "id": future_duties[0].get("id")})
+        elif sorted_duties:
+            res_actions.append({"type": "highlight_duty", "id": sorted_duties[0].get("id")})
+        return {
+            "response": f"Here is your roster schedule ({len(sorted_duties)} duties found):\n- " + "\n- ".join(lines),
+            "actions": res_actions
+        }
+
     # --- 7. Query: relative range (this week, next week, last week, this month, next month, last month) ---
     range_result = _filter_duties_by_relative_range(tokens, duties, now)
     if range_result and tokens_set.intersection({"show", "list", "get", "duties", "duty", "my", "schedule", "flight", "flights", "roster"}):
@@ -993,7 +1193,12 @@ def process_prompt(prompt: str, context: Optional[str], reference: Optional[date
 
     # --- 16. Query: next duty ---
     if ((tokens_set.intersection({"next", "upcoming"}) and tokens_set.intersection({"duty", "flight", "flights", "roster", "schedule", "work"})) 
-            or "flying next" in prompt_lower or "what's next" in prompt_lower or "what is next" in prompt_lower) and duties:
+            or "flying next" in prompt_lower or "what's next" in prompt_lower or "what is next" in prompt_lower):
+        if not duties:
+            return {
+                "response": "You have no upcoming duties scheduled in your roster.",
+                "actions": []
+            }
         future = [
             item
             for item in duties
@@ -1004,8 +1209,13 @@ def process_prompt(prompt: str, context: Optional[str], reference: Optional[date
             item = future[0]
             duty_id = item.get("id")
             return {
-                "response": f"Next duty: {_format_duty(item)}",
+                "response": f"Your next upcoming duty is: {_format_duty(item)}",
                 "actions": [{"type": "highlight_duty", "id": duty_id}] if duty_id is not None else [],
+            }
+        else:
+            return {
+                "response": "No upcoming duties found in your roster.",
+                "actions": []
             }
 
     # --- 17. Query: conflict checks / overlaps ---
@@ -1058,11 +1268,7 @@ def process_prompt(prompt: str, context: Optional[str], reference: Optional[date
             "response": "Navigating to your Roster Overview now.",
             "actions": [{"type": "navigate_roster"}]
         }
-    if is_open_or_go and "dashboard" in tokens_set:
-        return {
-            "response": "Opening your dashboard console now.",
-            "actions": [{"type": "navigate_dashboard"}]
-        }
+
 
     # Fallback response
     return {

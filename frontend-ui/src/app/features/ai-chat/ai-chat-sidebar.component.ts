@@ -22,22 +22,24 @@ interface ChatMessage {
   standalone: true,
   imports: [CommonModule, FormsModule, LoadingSpinnerComponent],
   template: `
-    <aside class="panel flex h-full w-full flex-col p-4 bg-green-50/90 backdrop-blur border-green-700 shadow-panel animate-fade-in relative overflow-hidden">
+    <aside class="panel flex h-full w-full flex-col p-4 bg-slate-950/40 backdrop-blur-md border-slate-800 shadow-2xl animate-fade-in relative overflow-hidden">
       <!-- Header -->
-      <div class="mb-4 flex items-center justify-between pb-2 border-b border-green-200/60">
+      <div class="mb-4 flex items-center justify-between pb-3 border-b border-slate-800/80">
         <div class="flex items-center gap-2">
-          <span class="text-2xl">👨‍✈️</span>
+          <span class="text-2xl">{{ isAdmin ? '💼' : '👨‍✈️' }}</span>
           <div>
-            <h3 class="text-lg font-extrabold text-green-950 flex items-center gap-1.5 leading-none">
-              Operations Copilot
+            <h3 class="text-base font-extrabold text-slate-100 flex items-center gap-1.5 leading-none">
+              {{ isAdmin ? 'Operations Controller' : 'Operations Copilot' }}
             </h3>
-            <p class="text-[10px] text-green-700 font-bold uppercase mt-1">AI Cockpit Interface</p>
+            <p class="text-[9px] text-cyan-400 font-extrabold uppercase mt-1.5 tracking-wider">
+              {{ isAdmin ? 'Admin Management Terminal' : 'AI Cockpit Interface' }}
+            </p>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <button
             (click)="clearChat()"
-            class="rounded-lg bg-green-100 hover:bg-green-200 p-1.5 text-green-950 transition border border-green-300 flex items-center justify-center hover:scale-105 active:scale-95"
+            class="rounded-lg bg-slate-800/75 hover:bg-slate-700 p-1.5 text-slate-200 transition border border-slate-700/50 flex items-center justify-center hover:scale-105 active:scale-95"
             title="Clear Chat"
           >
             🧹
@@ -45,7 +47,7 @@ interface ChatMessage {
           <button
             *ngIf="!showDashboard"
             (click)="toggleDashboard(true)"
-            class="rounded-lg bg-green-700 hover:bg-green-800 px-3 py-1.5 text-xs font-bold text-white transition shadow-sm border border-green-600 flex items-center gap-1 hover:scale-105 active:scale-95"
+            class="rounded-lg bg-cyan-600 hover:bg-cyan-500 px-3 py-1.5 text-xs font-bold text-white transition shadow-md border border-cyan-500/30 flex items-center gap-1 hover:scale-105 active:scale-95"
           >
             📊 Full Dashboard
           </button>
@@ -53,21 +55,26 @@ interface ChatMessage {
       </div>
 
       <!-- Messages Stream -->
-      <div #messageStream class="mb-3 flex-1 space-y-4 overflow-y-auto rounded-xl border border-green-200 bg-white/60 p-3 scrollbar-thin">
+      <div #messageStream class="mb-3 flex-1 space-y-4 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/10 p-3 scrollbar-thin">
         
         <!-- Welcome Briefing / Greeting Card if no user messages yet -->
         <div *ngIf="messages.length === 0 && !loading" class="p-6 text-center space-y-4 animate-fade-in">
-          <span class="text-5xl block animate-bounce">🤖</span>
-          <h4 class="text-xl font-extrabold text-green-950">Welcome to your Cockpit</h4>
-          <p class="text-sm text-green-800 max-w-xs mx-auto leading-relaxed">
-            I am your Operations Copilot. You can query your schedule, view flight analytics, or request roster changes.
+          <span class="text-5xl block">🤖</span>
+          <h4 class="text-lg font-extrabold text-slate-100">
+            Welcome to your {{ isAdmin ? 'Management Console' : 'Cockpit' }}
+          </h4>
+          <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+            {{ isAdmin 
+              ? 'I am your Operations Controller Assistant. You can create/modify/delete duties, check scheduling conflicts, or assign pilots via chat.' 
+              : 'I am your Operations Copilot. You can query your schedule, view flight analytics, check rest limits, or request weather briefings.' 
+            }}
           </p>
           <div class="pt-2">
             <button
               (click)="sendSilentBriefing()"
-              class="rounded-xl bg-gradient-to-r from-green-700 to-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-md hover:scale-105 transition border border-green-600 active:scale-95"
+              class="rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-4 py-2.5 text-xs font-bold shadow-md hover:scale-105 transition border border-cyan-500/20 active:scale-95"
             >
-              💼 Generate Daily Briefing
+              💼 Generate {{ isAdmin ? 'Operations Briefing' : 'Daily Briefing' }}
             </button>
           </div>
         </div>
@@ -76,44 +83,40 @@ interface ChatMessage {
           *ngFor="let msg of messages"
           class="rounded-2xl px-4 py-3 text-sm shadow-sm transition duration-200 flex flex-col gap-1.5"
           [ngClass]="msg.role === 'user' 
-            ? 'bg-gradient-to-r from-green-800 to-emerald-800 text-white rounded-tr-none ml-10 shadow-green-900/10' 
-            : 'bg-white/95 text-green-950 border border-green-100 rounded-tl-none mr-10 shadow-slate-100/10'"
+            ? 'bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-tr-none ml-10 border border-cyan-500/20 shadow-cyan-950/20' 
+            : 'bg-slate-800/90 text-slate-100 border border-slate-700/50 rounded-tl-none mr-10 shadow-slate-950/30'"
         >
-          <div class="flex items-center justify-between text-[10px] font-extrabold tracking-wider uppercase">
-            <span [ngClass]="msg.role === 'user' ? 'text-green-200' : 'text-green-800'">
-              {{ msg.role === 'user' ? 'Pilot' : 'Copilot' }}
+          <div class="flex items-center justify-between text-[9px] font-extrabold tracking-wider uppercase">
+            <span [ngClass]="msg.role === 'user' ? 'text-cyan-200' : 'text-cyan-400'">
+              {{ msg.role === 'user' 
+                ? (isAdmin ? 'Admin' : 'Pilot') 
+                : (isAdmin ? 'Controller Assistant' : 'Copilot') 
+              }}
             </span>
           </div>
-          <p class="whitespace-pre-line text-sm leading-relaxed">{{ msg.text }}</p>
-          
-          <div *ngIf="msg.hasDashboardAction" class="mt-2 pt-2 border-t border-green-200/30 flex justify-end">
-            <button
-              class="flex items-center gap-1.5 rounded-lg bg-green-700 hover:bg-green-800 px-3.5 py-1.5 text-xs font-bold text-white hover:scale-105 active:scale-95 transition shadow border border-green-600"
-              (click)="executeActions(msg)"
-            >
-              🧭 Go to Dashboard
-            </button>
-          </div>
+          <p class="whitespace-pre-line text-xs leading-relaxed">{{ msg.text }}</p>
         </div>
 
         <!-- Premium Typing / Thinking Indicator -->
-        <div *ngIf="loading" class="flex gap-1 bg-white/90 border border-green-100 text-green-950 rounded-2xl rounded-tl-none px-4 py-3 mr-10 w-max shadow-sm items-center animate-fade-in">
-          <span class="text-[10px] font-bold text-green-800 mr-2 uppercase tracking-wide">Copilot is thinking</span>
+        <div *ngIf="loading" class="flex gap-1.5 bg-slate-800/90 border border-slate-700/50 text-slate-100 rounded-2xl rounded-tl-none px-4 py-3 mr-10 w-max shadow-md items-center animate-fade-in">
+          <span class="text-[9px] font-bold text-cyan-400 mr-1.5 uppercase tracking-wide">
+            {{ isAdmin ? 'Assistant is coordinating' : 'Copilot is thinking' }}
+          </span>
           <div class="flex gap-1 items-center pt-0.5">
-            <span class="w-1.5 h-1.5 bg-green-800 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-            <span class="w-1.5 h-1.5 bg-green-800 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-            <span class="w-1.5 h-1.5 bg-green-800 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+            <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+            <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+            <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
           </div>
         </div>
       </div>
 
-      <p *ngIf="error" class="mb-2 text-xs text-rose-600 font-extrabold px-1">⚠️ Error: {{ error }}</p>
+      <p *ngIf="error" class="mb-2 text-xs text-rose-400 font-extrabold px-1">⚠️ {{ error }}</p>
 
       <!-- Suggestion Chips -->
       <div class="mb-3 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto px-1 py-1">
         <button
           *ngFor="let chip of suggestionChips"
-          class="rounded-full border border-green-400/60 bg-white/80 hover:bg-green-100 hover:text-green-950 px-3 py-1 text-[11px] font-bold text-green-900 hover:scale-105 active:scale-95 transition shadow-sm border border-green-300"
+          class="rounded-full border border-slate-700/80 bg-slate-800/60 hover:bg-slate-700 text-slate-200 hover:text-slate-100 px-3 py-1.5 text-[10px] font-bold hover:scale-105 active:scale-95 transition shadow-sm hover:border-cyan-500/50"
           (click)="sendQuick(chip.prompt)"
         >
           {{ chip.label }}
@@ -121,15 +124,15 @@ interface ChatMessage {
       </div>
 
       <!-- Input Bar -->
-      <div class="mt-2 flex gap-2 items-center bg-white/80 p-1.5 rounded-xl border border-green-200/80 shadow-inner">
+      <div class="mt-1 flex gap-2 items-center bg-slate-950/75 p-1.5 rounded-xl border border-slate-800/80 shadow-inner">
         <input
           [(ngModel)]="prompt"
-          class="w-full bg-transparent px-3 py-1.5 text-sm text-green-950 outline-none placeholder-green-700/60"
-          placeholder="Ask something, e.g. Show my next duty..."
+          class="w-full bg-transparent px-3 py-1.5 text-xs text-slate-100 outline-none placeholder-slate-500"
+          [placeholder]="isAdmin ? 'Assign pilot to UA123...' : 'Ask about your schedule, weather, rest limit...'"
           (keyup.enter)="send()"
         />
         <button 
-          class="rounded-lg bg-green-700 hover:bg-green-800 px-4 py-2 text-xs font-bold text-white hover:scale-105 active:scale-95 transition shadow shadow-green-900/30 border border-green-600 flex items-center justify-center" 
+          class="rounded-lg bg-cyan-600 hover:bg-cyan-500 px-4 py-2 text-xs font-bold text-white hover:scale-105 active:scale-95 transition shadow shadow-cyan-950/30 border border-cyan-500/30 flex items-center justify-center" 
           (click)="send()"
         >
           Send
@@ -146,14 +149,7 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
   error = '';
   duties: DutyLog[] = [];
   
-  suggestionChips = [
-    { label: '🧭 Next Duty', prompt: 'Show my next duty' },
-    { label: '📅 Full Roster', prompt: 'Show my roster' },
-    { label: '📈 Flight Hours', prompt: 'How many hours have I flown this month?' },
-    { label: '📜 Timeline Registry', prompt: 'Show registry timeline' },
-    { label: '📊 Open Analytics', prompt: 'Open analytics' },
-    { label: '🏝️ Day Off', prompt: 'When is my next day off?' }
-  ];
+  suggestionChips: { label: string; prompt: string }[] = [];
 
   messages: ChatMessage[] = [];
   showDashboard = true;
@@ -168,7 +164,12 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
     this.loadDuties();
   }
 
+  get isAdmin() {
+    return this.authService.isAdmin();
+  }
+
   ngOnInit() {
+    this.initSuggestionChips();
     this.sendSilentBriefing();
 
     this.showSub = this.aiService.showDashboard$.subscribe((show) => {
@@ -178,6 +179,28 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.showSub?.unsubscribe();
+  }
+
+  private initSuggestionChips() {
+    if (this.isAdmin) {
+      this.suggestionChips = [
+        { label: '➕ Create Flight', prompt: 'Create flight UA100 from DXB to LHR tomorrow' },
+        { label: '👥 Assign Pilot', prompt: 'Assign pilot 1 to flight UA100' },
+        { label: '⚠️ Overlap Conflicts', prompt: 'Check for scheduling conflicts' },
+        { label: '📜 Audit Registry', prompt: 'Show registry timeline' },
+        { label: '📊 Analytics', prompt: 'Open analytics' },
+        { label: '🌦️ DXB Weather', prompt: 'What is the weather at DXB?' }
+      ];
+    } else {
+      this.suggestionChips = [
+        { label: '🧭 Next Duty', prompt: 'Show my next duty' },
+        { label: '📅 Full Roster', prompt: 'Show my roster' },
+        { label: '📈 Flight Hours', prompt: 'How many hours have I flown this month?' },
+        { label: '⚠️ Rest Gaps', prompt: 'Check for rest compliance warnings' },
+        { label: '🌦️ DXB Weather', prompt: 'What is the weather at DXB?' },
+        { label: '🏝️ Day Off', prompt: 'When is my next day off?' }
+      ];
+    }
   }
 
   toggleDashboard(show: boolean) {
@@ -207,28 +230,23 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
     this.aiService.sendMessage({ prompt: 'Generate daily briefing' }).subscribe({
       next: (result) => {
         let targetDutyId: number | undefined;
-        let hasDashboardAction = false;
         if (result.actions && result.actions.length > 0) {
           const highlightAction = result.actions.find((act: any) => act.type === 'highlight_duty');
           if (highlightAction && highlightAction.id) {
             targetDutyId = highlightAction.id;
           }
-          hasDashboardAction = result.actions.some((act: any) => 
-            act.type === 'highlight_duty' || act.type.startsWith('navigate_')
-          );
         }
         const newMsg: ChatMessage = {
           role: 'assistant',
           text: result.text || 'Briefing generated, but no response text returned.',
           dutyId: targetDutyId,
-          actions: result.actions,
-          hasDashboardAction: hasDashboardAction
+          actions: result.actions
         };
         this.messages.push(newMsg);
         this.loading = false;
         this.scrollToBottom();
 
-        if (hasDashboardAction) {
+        if (this.showDashboard) {
           setTimeout(() => {
             this.executeActions(newMsg);
           }, 400);
@@ -257,23 +275,18 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
     this.aiService.sendMessage({ prompt: text }).subscribe({
       next: (result) => {
         let targetDutyId: number | undefined;
-        let hasDashboardAction = false;
         if (result.actions && result.actions.length > 0) {
           const highlightAction = result.actions.find((act: any) => act.type === 'highlight_duty');
           if (highlightAction && highlightAction.id) {
             targetDutyId = highlightAction.id;
           }
-          hasDashboardAction = result.actions.some((act: any) => 
-            act.type === 'highlight_duty' || act.type.startsWith('navigate_')
-          );
         }
 
         const newMsg: ChatMessage = {
           role: 'assistant',
           text: result.text || 'No response received from AI endpoint.',
           dutyId: targetDutyId,
-          actions: result.actions,
-          hasDashboardAction: hasDashboardAction
+          actions: result.actions
         };
         this.messages.push(newMsg);
 
@@ -284,7 +297,7 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
         this.loading = false;
         this.scrollToBottom();
 
-        if (hasDashboardAction) {
+        if (this.showDashboard) {
           setTimeout(() => {
             this.executeActions(newMsg);
           }, 400);
@@ -324,7 +337,9 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
   }
 
   executeActions(msg: ChatMessage) {
-    this.aiService.triggerShowDashboard(true);
+    if (!this.showDashboard) {
+      return;
+    }
     
     if (msg.dutyId) {
       this.highlightDuty(msg.dutyId);
@@ -332,7 +347,19 @@ export class AiChatSidebarComponent implements OnInit, OnDestroy {
 
     if (msg.actions && msg.actions.length > 0) {
       for (const action of msg.actions) {
-        if (action.type.startsWith('navigate_')) {
+        if (action.type === 'navigate_weather') {
+          const airport = action.payload?.airport || '';
+          if (airport) {
+            localStorage.setItem('selected_weather_airport', airport);
+          }
+          if (!this.router.url.includes('/dashboard')) {
+            this.router.navigate(['/dashboard']).then(() => {
+              setTimeout(() => this.aiService.triggerNavigateTab('weather'), 400);
+            });
+          } else {
+            this.aiService.triggerNavigateTab('weather');
+          }
+        } else if (action.type.startsWith('navigate_')) {
           const tab = action.type.replace('navigate_', '');
           if (!this.router.url.includes('/dashboard')) {
             this.router.navigate(['/dashboard']).then(() => {

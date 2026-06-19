@@ -10,7 +10,7 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
   template: `
-    <div class="flex min-h-screen items-center justify-center bg-cockpit-950">
+    <div class="flex min-h-screen items-center justify-center bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-950">
       <div class="panel w-full max-w-md p-6">
         <h1 class="mb-4 text-xl font-semibold text-slate-100">Create Crew Account</h1>
         <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">

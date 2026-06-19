@@ -65,6 +65,38 @@ export class AuthService {
     return this.getRole() === 'Admin';
   }
 
+  getUserName(): string {
+    const token = this.getToken();
+    if (!token) {
+      return '';
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, string>;
+      // .NET uses ClaimTypes.Name which maps to the email claim
+      const name = payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ?? '';
+      // Try to extract display name (email prefix)
+      return name.includes('@') ? name.split('@')[0] : name;
+    } catch {
+      return '';
+    }
+  }
+
+  getUserId(): number | null {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, string>;
+      const id = payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+      return id ? parseInt(id, 10) : null;
+    } catch {
+      return null;
+    }
+  }
+
   logout(): void {
     localStorage.removeItem(this.tokenKey);
   }

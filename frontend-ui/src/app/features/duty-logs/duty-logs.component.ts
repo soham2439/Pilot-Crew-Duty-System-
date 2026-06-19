@@ -58,6 +58,31 @@ export class DutyLogsComponent implements OnInit {
   ngOnInit(): void {
     this.fetchLogs();
     this.fetchPilots();
+
+    // Subscribe to dutyCode changes to dynamically handle validations
+    this.form.get('dutyCode')?.valueChanges.subscribe((code) => {
+      this.handleDutyCodeChange(code);
+    });
+  }
+
+  private handleDutyCodeChange(code: string) {
+    const isFlight = code === 'FDUT';
+    if (!isFlight) {
+      this.form.patchValue({
+        flightNumber: '-',
+        origin: '-',
+        destination: '-',
+        aircraftType: '-'
+      });
+    } else {
+      const current = this.form.value;
+      this.form.patchValue({
+        flightNumber: current.flightNumber === '-' ? '' : current.flightNumber,
+        origin: current.origin === '-' ? '' : current.origin,
+        destination: current.destination === '-' ? '' : current.destination,
+        aircraftType: current.aircraftType === '-' ? '' : current.aircraftType
+      });
+    }
   }
 
   fetchLogs() {
@@ -84,6 +109,7 @@ export class DutyLogsComponent implements OnInit {
 
   openCreate() {
     this.editingId = null;
+    this.error = '';
     this.form.reset({
       dutyCode: 'FDUT',
       flightNumber: '',
@@ -100,6 +126,7 @@ export class DutyLogsComponent implements OnInit {
 
   openEdit(log: DutyLog) {
     this.editingId = log.id;
+    this.error = '';
     this.form.patchValue({
       dutyCode: log.dutyCode,
       flightNumber: log.flightNumber,
@@ -221,6 +248,10 @@ export class DutyLogsComponent implements OnInit {
 
   private routeValidation(): ValidatorFn {
     return (control: AbstractControl): ValidationErrors | null => {
+      const dutyCode = control.get('dutyCode')?.value;
+      if (dutyCode !== 'FDUT') {
+        return null;
+      }
       const origin = (control.get('origin')?.value as string | undefined)?.trim()?.toUpperCase();
       const destination = (control.get('destination')?.value as string | undefined)
         ?.trim()

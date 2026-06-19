@@ -91,6 +91,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    // Automatically apply EF Core migrations on startup
+    context.Database.Migrate();
+    
     context.Database.ExecuteSqlRaw(@"
         CREATE TABLE IF NOT EXISTS ""RegistryLogs"" (
             ""Id"" SERIAL PRIMARY KEY,

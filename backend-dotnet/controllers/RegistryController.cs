@@ -20,6 +20,7 @@ namespace backend_dotnet.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetRegistry()
         {
             var logs = await _context.RegistryLogs

@@ -69,10 +69,21 @@ namespace backend_dotnet.Controllers
                 .Take(40)
                 .ToListAsync();
 
+            string userName = "Captain";
+            if (userId.HasValue)
+            {
+                var userRecord = await _context.Users.FindAsync(userId.Value);
+                if (userRecord != null)
+                {
+                    userName = userRecord.Name;
+                }
+            }
+
             var contextJson = JsonSerializer.Serialize(new
             {
                 role,
                 pilotId = userId,
+                userName,
                 duties = duties.Select(d => new
                 {
                     d.Id,
@@ -97,7 +108,7 @@ namespace backend_dotnet.Controllers
                     timestamp = r.Timestamp.ToString("yyyy-MM-dd HH:mm:ss"),
                     r.Details
                 })
-            });
+            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             var aiBaseUrl = _configuration["Ai:BaseUrl"] ?? "http://localhost:8000";
             var client = _httpClientFactory.CreateClient();

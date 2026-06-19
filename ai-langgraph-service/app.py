@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from langgraph.graph import END, StateGraph
 
 from duty_assistant import process_prompt, parse_context, parse_registry
+from rag_engine import rag_engine
 
 try:
     from langchain_openai import ChatOpenAI
@@ -26,6 +27,11 @@ try:
     from langchain_ollama import ChatOllama
 except Exception:
     ChatOllama = None
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except Exception:
+    ChatGoogleGenerativeAI = None
 
 
 # Context variables for tool execution (coroutine-safe)
@@ -198,8 +204,10 @@ if tool is not None:
     def navigate_page(page: str) -> str:
         """Navigate pilot console to a tab page.
         Args:
-            page: Tab page to navigate to (dashboard, roster, analytics, registry).
+            page: Tab page to navigate to (roster, analytics, registry).
         """
+        if page.lower() == "dashboard":
+            return "Navigation to the dashboard page is disabled."
         actions = actions_var.get()
         actions.append({"type": f"navigate_{page.lower()}"})
         actions_var.set(actions)
@@ -321,6 +329,22 @@ if tool is not None:
         except Exception as e:
             return f"Error: {e}"
 
+    @tool
+    def get_airport_weather(airport_code: str) -> str:
+        """Get the weather forecast and raw METAR report for a given airport (e.g. DXB, LHR, BOM).
+        Args:
+            airport_code: Three-letter IATA airport code (e.g. DXB).
+        """
+        code = str(airport_code).upper().strip()
+        from duty_assistant import WEATHER_DB
+        if code in WEATHER_DB:
+            w = WEATHER_DB[code]
+            actions = actions_var.get()
+            actions.append({"type": "navigate_weather", "payload": {"airport": code}})
+            actions_var.set(actions)
+            return f"Weather for {code}: {w['condition']}, Temp: {w['temp']}°C, Wind: {w['wind']}. METAR: {w['metar']}"
+        return f"Airport {code} weather report is not available. Supported: {', '.join(WEATHER_DB.keys())}"
+
     tools = [
         get_next_duty,
         get_week_schedule,
@@ -338,7 +362,8 @@ if tool is not None:
         assign_pilot,
         unassign_pilot,
         detect_conflicts,
-        detect_short_rest_periods
+        detect_short_rest_periods,
+        get_airport_weather
     ]
 else:
     tools = []
@@ -372,27 +397,45 @@ class ChatState(TypedDict):
 # Globally cached model instances
 _cached_openai_model = None
 _cached_ollama_model = None
+_cached_gemini_model = None
 
 def get_model():
-    global _cached_openai_model, _cached_ollama_model
+    global _cached_openai_model, _cached_ollama_model, _cached_gemini_model
     
     use_ollama = os.getenv("USE_OLLAMA", "false").lower() == "true"
-    api_key = os.getenv("OPENAI_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
     
-    if use_ollama or not api_key:
-        if ChatOllama is not None:
-            if _cached_ollama_model is None:
-                ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
-                ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-                print(f"Initializing ChatOllama with model {ollama_model} at {ollama_base_url}...")
-                _cached_ollama_model = ChatOllama(model=ollama_model, base_url=ollama_base_url, temperature=0.2)
-            return _cached_ollama_model
-        elif api_key and ChatOpenAI is not None:
-            if _cached_openai_model is None:
-                print("USE_OLLAMA is true or api_key missing, but ChatOllama is not available. Falling back to ChatOpenAI.")
-                _cached_openai_model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
-            return _cached_openai_model
-    elif api_key and ChatOpenAI is not None:
+    # Ensure standard Google key environment is populated
+    if gemini_key and not os.getenv("GOOGLE_API_KEY"):
+        os.environ["GOOGLE_API_KEY"] = gemini_key
+
+    # Try Ollama first if selected
+    if use_ollama and ChatOllama is not None:
+        try:
+            # Check if Ollama is running (simple check)
+            import urllib.request
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            req = urllib.request.Request(f"{ollama_base_url}/api/tags")
+            with urllib.request.urlopen(req, timeout=1.5) as response:
+                if response.status == 200:
+                    if _cached_ollama_model is None:
+                        ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+                        print(f"Initializing ChatOllama with model {ollama_model} at {ollama_base_url}...")
+                        _cached_ollama_model = ChatOllama(model=ollama_model, base_url=ollama_base_url, temperature=0.2)
+                    return _cached_ollama_model
+        except Exception as e:
+            print(f"Ollama server connectivity check failed: {e}. Falling back to API cloud models.")
+
+    # Fallback/Primary to Gemini (using gemini-1.5-flash)
+    if gemini_key and ChatGoogleGenerativeAI is not None:
+        if _cached_gemini_model is None:
+            print("Initializing ChatGoogleGenerativeAI with gemini-1.5-flash...")
+            _cached_gemini_model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
+        return _cached_gemini_model
+
+    # Fallback to OpenAI if key is present
+    if openai_key and ChatOpenAI is not None:
         if _cached_openai_model is None:
             print("Initializing ChatOpenAI with gpt-4o-mini...")
             _cached_openai_model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
@@ -409,32 +452,38 @@ def build_graph():
         roster_context_var.set(context or "")
         actions_var.set([])
 
-        # First run rule-based local assistant
-        local_result = process_prompt(prompt, context)
-        if not local_result.get("response", "").startswith("I can help"):
-            state["response"] = local_result.get("response")
-            state["actions"] = local_result.get("actions", [])
-            return state
+        # Retrieve RAG context
+        rag_context = ""
+        if rag_engine:
+            try:
+                matches = rag_engine.retrieve(prompt, top_k=2)
+                valid_matches = [text for text, score in matches if score > 0.1]
+                if valid_matches:
+                    rag_context = "\n\nRetrieved Crew Regulations Context:\n" + "\n".join([f"- {text}" for text in valid_matches])
+            except Exception as e:
+                print(f"RAG search error: {e}")
 
         # Get model from cache
         model = get_model()
 
         if model is not None:
             try:
-                role, duties, pilot_id = parse_context(context)
+                role, duties, pilot_id, user_name = parse_context(context)
                 
                 # Fetch/init session context memory
                 session_key = pilot_id if pilot_id is not None else 0
                 mem = SESSION_MEMORY.setdefault(session_key, {
                     "lastHighlightedDutyId": None,
-                    "lastViewedPage": "dashboard",
+                    "lastViewedPage": "roster",
                     "lastAircraft": None
                 })
 
                 model_with_tools = model.bind_tools(tools)
 
+                role_desc = "as an Administrator" if str(role).lower() == "admin" else "as a Pilot"
                 system_message = (
                     "You are an Aviation Operations Copilot for a pilot crew duty console.\n"
+                    f"You are interacting with the user {role_desc} named {user_name}.\n"
                     "Use the provided roster context and registry logs to answer questions or execute screen actions.\n"
                     "Be clear, precise, and operational.\n"
                     f"Roster context JSON: {context or 'N/A'}\n"
@@ -442,8 +491,15 @@ def build_graph():
                     f"- Last Highlighted Duty ID: {mem.get('lastHighlightedDutyId')}\n"
                     f"- Last Viewed Page: {mem.get('lastViewedPage')}\n"
                     f"- Last Aircraft: {mem.get('lastAircraft')}\n\n"
-                    "If the user asks to modify or view 'it' or 'that flight', use the Last Highlighted Duty ID as target.\n"
-                    "If you determine that an action must occur (like highlighting a card or switching views), invoke the corresponding tool!"
+                    f"{rag_context}\n\n"
+                    "Instructions:\n"
+                    "1. If the user is a Pilot (role is Pilot), the duties in the Roster context JSON are their own personal duties. Refer to them as 'your duty', 'your flight', 'your schedule', or 'your roster'.\n"
+                    "2. If they ask about their duties, schedule, or flights generally, list or summarize them using the context data, and call navigate_page with page='roster' to show their roster view.\n"
+                    "3. If they ask about a specific flight (e.g., flight number, departure time, status, delays), look it up in the context JSON and explain its details directly. If it is delayed, check the remarks field.\n"
+                    "4. If they ask if they are free on a date/day, check if there are any active flight duties (FDUT) scheduled. DOFF (Day Off) and VAC (Vacation) mean they are free/off.\n"
+                    "5. If you refer to a specific duty, invoke highlight_duty tool with the duty's ID to highlight it on their screen.\n"
+                    "6. If the user asks to modify or view 'it' or 'that flight', use the Last Highlighted Duty ID as target.\n"
+                    "7. If you determine that an action must occur (like highlighting a card or switching views), invoke the corresponding tool!"
                 )
 
                 messages = [
@@ -488,12 +544,13 @@ def build_graph():
                 return state
             except Exception as e:
                 print(f"LLM agent workflow failed: {e}. Falling back to local helper.")
-                state["response"] = local_result.get("response")
-                state["actions"] = local_result.get("actions", [])
-                return state
 
-        # If no LLM model initialized, fallback to local rule helper
-        state["response"] = local_result.get("response")
+        # If no LLM model initialized or it failed, fallback to local rule helper
+        local_result = process_prompt(prompt, context)
+        resp = local_result.get("response", "")
+        if rag_context and (any(k in prompt.lower() for k in ["rule", "limit", "policy", "standby", "rest", "regulation", "sick", "doff", "vac"]) or resp.startswith("I can help with duty queries")):
+            resp = f"Based on the flight crew regulations:\n{rag_context}\n\n(Note: Fallback offline assistant mode)"
+        state["response"] = resp
         state["actions"] = local_result.get("actions", [])
         return state
 
